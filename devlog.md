@@ -20,3 +20,15 @@ since it didn't follow the expected output, but most inputs should be covered wi
 4-13-2025 @ 21:24
 I am now running into synchronization and deadlock issues, customers are waiting for a teller and the teller is being
 hung up on mystery tasks. Needs further investigation.
+
+4-13-2025 @ 21:50
+I figured out what was going on, it was a synchronization issue where the customer's corresponding teller was running
+into a mismatch, making it so they were unable to communicate with each other and causing a deadlock. I implemented a
+fix that has it so the tellers have their own line, so there's a more explicit assignment between teller and customer.
+This should remove the ambiguity and fix the sync issue.
+
+4-13-2025 @ 10:30
+After fixing the synchronization issue, the tellers were not properly closing out at the end of the day and were hanging
+on open. This was fixed by introducing a stop code (in the form of a poison customer) that signals the threads to close
+out, along with an additional check at both ends of teller execution to check for the stop code. The code now works,
+and is almost ready to ship.

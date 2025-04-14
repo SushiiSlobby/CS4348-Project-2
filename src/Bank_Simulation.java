@@ -16,10 +16,14 @@ public class Bank_Simulation {
     public static final List<Teller> tellers = new ArrayList<>();
 
     public static final AtomicInteger customersServed = new AtomicInteger(0);
+    public static final AtomicInteger customersInBank = new AtomicInteger(0);
 
     private static int tellerIndex = 0;
 
     public static void main(String[] args) throws InterruptedException {
+        List<Thread> customerThreads = new ArrayList<>();
+        List<Thread> tellerThreads = new ArrayList<>();
+
         for(int i = 0; i < NUM_TELLERS; i++) {
             Teller teller = new Teller(i);
             tellers.add(teller);
@@ -34,7 +38,28 @@ public class Bank_Simulation {
         for(int i = 0; i < NUM_CUSTOMERS; i++) {
            Customer customer = new Customer(i);
            Thread t = new Thread(customer);
+           customerThreads.add(t);
            t.start();
+        }
+
+        for(Thread t : customerThreads) {
+            t.join();
+        }
+
+        // Send one poison pill per teller
+        for (Teller teller : tellers) {
+            teller.myQueue.put(new PoisonPillCustomer());
+        }
+
+        Thread.sleep(100);
+
+        System.out.println("The bank closes for the day");
+
+    }
+
+    static class PoisonPillCustomer extends Customer {
+        public PoisonPillCustomer() {
+            super(-1);
         }
 
     }
@@ -44,7 +69,8 @@ public class Bank_Simulation {
         Semaphore customerReady = new Semaphore(0);
         Semaphore transactionDone = new Semaphore(0);
         Customer currentCustomer;
-        boolean open = true;
+        BlockingQueue<Customer> myQueue = new LinkedBlockingQueue<>();
+        //boolean open = true;
 
         public Teller(int id) {
             this.id = id;
@@ -54,10 +80,15 @@ public class Bank_Simulation {
         public void run() {
             System.out.printf("Teller %d []: Ready to serve\n",id);
 
-            while(customersServed.get() < NUM_CUSTOMERS) {
+            while(true) {
                 try {
                     System.out.printf("Teller %d []: Waiting for a customer\n", id);
-                    currentCustomer = customerQueue.take();
+                    currentCustomer = myQueue.take();
+
+                    if (currentCustomer.id == -1) {
+                        System.out.printf("Teller %d []: No more customers, closing\n", id);
+                        break;
+                    }
 
                     System.out.printf("Teller %d [Customer %d]: Customer selected\n", id, currentCustomer.id);
                     customerReady.release();
@@ -74,6 +105,9 @@ public class Bank_Simulation {
                         Thread.sleep(random(5,30));
                         managerAccess.release();
                     }
+                    else {
+                        System.out.printf("Teller %d [Customer %d]: Handling deposit transaction\n", id, currentCustomer.id);
+                    }
 
                     System.out.printf("Teller %d [Customer %d]: Going to safe\n", id, currentCustomer.id);
                     safeAccess.acquire();
@@ -82,12 +116,21 @@ public class Bank_Simulation {
                     System.out.printf("Teller %d [Customer %d]: Leaving safe\n", id, currentCustomer.id);
                     safeAccess.release();
 
+
                     System.out.printf("Teller %d [Customer %d]: Transaction complete\n", id, currentCustomer.id);
                     transactionDone.release();
                     currentCustomer.left.acquire();
+                    System.out.printf("Teller %d [Customer %d]: Customer has left\n", id, currentCustomer.id);
 
                     customersServed.incrementAndGet();
+
+                    if (customersServed.get() >= NUM_CUSTOMERS) {
+                        System.out.printf("Teller %d []: No more customers, closing\n", id);
+                        break;
+                    }
+
                 } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
                     break;
                 }
             }
@@ -99,6 +142,7 @@ public class Bank_Simulation {
         boolean isWithdrawal;
         Semaphore transactionTypeAvailable = new Semaphore(0);
         Semaphore left = new Semaphore(0);
+        boolean transactionDone = false;
 
         Customer(int id) {
             this.id = id;
@@ -112,6 +156,7 @@ public class Bank_Simulation {
                 System.out.printf("Customer %d []: Wants to perform %s transaction\n", id, isWithdrawal ? "withdrawal" : "deposit");
 
                 bankOpen.acquire();
+                customersInBank.incrementAndGet();
 
                 System.out.printf("Customer %d []: Going to bank\n", id);
                 doorAccess.acquire();
@@ -122,6 +167,7 @@ public class Bank_Simulation {
                 Teller teller = getNextTeller();
                 System.out.printf("Customer %d [Teller %d]: Selected teller\n", id, teller.id);
                 System.out.printf("Customer %d [Teller %d]: Introduces self\n", id, teller.id);
+                teller.myQueue.put(this);
 
                 customerQueue.put(this);
                 teller.customerReady.acquire();
@@ -130,13 +176,15 @@ public class Bank_Simulation {
 
                 transactionTypeAvailable.release();
                 teller.transactionDone.acquire();
+                transactionDone = true;
 
                 System.out.printf("Customer %d [Teller %d]: Leaving after transaction\n", id, teller.id);
                 left.release();
                 doorAccess.release();
+                customersInBank.decrementAndGet();
 
             } catch (InterruptedException e) {
-                e.printStackTrace();
+                Thread.currentThread().interrupt();
             }
 
         }
