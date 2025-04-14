@@ -31,7 +31,7 @@ public class Bank_Simulation {
 
         bankOpen.release(NUM_CUSTOMERS);
 
-        for(int i = 0; i < NUM_TELLERS; i++) {
+        for(int i = 0; i < NUM_CUSTOMERS; i++) {
            Customer customer = new Customer(i);
            Thread t = new Thread(customer);
            t.start();
@@ -52,11 +52,11 @@ public class Bank_Simulation {
 
         @Override
         public void run() {
-            System.out.printf("Teller %d []: Ready to serve\n",id, id);
+            System.out.printf("Teller %d []: Ready to serve\n",id);
 
             while(customersServed.get() < NUM_CUSTOMERS) {
                 try {
-                    System.out.printf("Teller %d [] Waiting for a customer\n", id);
+                    System.out.printf("Teller %d []: Waiting for a customer\n", id);
                     currentCustomer = customerQueue.take();
 
                     System.out.printf("Teller %d [Customer %d]: Customer selected\n", id, currentCustomer.id);

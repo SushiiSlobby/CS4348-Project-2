@@ -16,3 +16,7 @@ done.
 4-13-2025 @ 21:00
 The main backbone of the project is complete, now it is just testing and bugfixing. I had to reformat some of the code
 since it didn't follow the expected output, but most inputs should be covered within the classes. 
+
+4-13-2025 @ 21:24
+I am now running into synchronization and deadlock issues, customers are waiting for a teller and the teller is being
+hung up on mystery tasks. Needs further investigation.
